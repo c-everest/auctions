@@ -1,0 +1,114 @@
+---
+title: "ce_scraping_to_rmd"
+description: Query each auction page and store the GET() request as an RMD file to prevent multiple rounds of requests.
+output: html_document
+---
+
+Load libraries
+```{r}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(httr)
+library(stringr)
+library(rvest)
+library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+#library(R.utils)
+library(tidyjson)
+```
+
+Assign common user agent
+```{r}
+ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36"
+```
+
+Read in file with target_urls
+```{r}
+target_urls <- read.csv('../data/auction_urls_aa.csv')
+
+
+target_urls <- target_urls%>%
+  add_column(http_error=NA)
+
+glimpse(target_urls)
+```
+Define 
+```{r}
+start <- 1
+end <- 500
+```
+
+```{r}
+for (i in start:length(target_urls$id[start:end])
+     )
+  {
+      #Print status message
+    message("Fetching response for row "
+            , i
+            , " out of "
+            , length(target_urls$id[start:end])
+            )
+    
+    #Pause for 1 second between requests
+    Sys.sleep(1)
+    
+    #Every 10 requests, pause for 3-5 seconds
+    if((i %% 10)==0){
+      message("Taking a break")
+      Sys.sleep(sample(3:5,3))}
+  
+    request <- GET(target_urls$url[i]
+                   ,user_agent(ua)
+                   ,verbose(info = TRUE))
+    
+      #Check the status code
+      #Request is NOT successful
+      if (request$status_code!=200)
+      {
+          #Return a message in the console 
+          message("The attempt to fetch the response for index "
+                  , i
+                  , " resulted in error code "
+                  , request$status_code
+                  )
+          #Store the error response codes for diagnostics
+          target_urls$http_error <- request$status_code
+      }
+      
+      #Request IS successful
+      else 
+      {
+       # http_response <- request
+        folder_name <- "rows_"%>%
+          paste0(start%>%as.character())%>%
+          paste0("_")%>%
+          paste0(end%>%as.character())
+    
+        folder_path <- "../data/bat_page_responses/group_a/"%>%
+          paste0(folder_name)%>%
+          paste0("/")
+        
+        file_extension <-".rds"
+
+        file_name<-target_urls$id[i]%>%
+          as.character()%>%
+          paste0(file_extension)
+        
+        file_location <- folder_path%>%
+          paste0(file_name)
+        
+        readr::write_rds(request, file_location, compress="none")
+
+      }
+  }
+
+```
+
+```{r}
+#write_csv(target_urls, "../data/auction_urls_aa.csv")
+```
+
+
+
+
