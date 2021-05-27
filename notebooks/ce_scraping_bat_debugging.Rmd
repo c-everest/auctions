@@ -1,0 +1,394 @@
+---
+title: "ce_scraping_bat_2"
+output: html_document
+---
+
+Load libraries
+```{r}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(httr)
+library(stringr)
+library(rvest)
+library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+#library(R.utils)
+library(tidyjson)
+library(readr)
+```
+
+#Manually set user agent to be a very common one
+
+```{r}
+# Let's set user agent to a super common one
+ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36"
+```
+
+```{r}
+debug <- read_csv('../data/mm_df_json.csv')[-1]
+```
+```{r}
+bug <- debug%>%sample_n(10)%>%
+  arrange(desc(count_pages))
+view(bug)
+```
+
+Create a dummy sample record to instantiate the JSON table
+```{r}
+sample_record <- '{"id":"12345","url":"https://sample.com/","title":"sample record title","subtitle":"sample record subtitle"}'%>%
+  enter_object()%>%
+  spread_all()%>%
+  as.tbl_json()
+
+sample_record$query_id <- 6789 
+```
+```{r}
+sample_record
+```
+
+```{r}
+for(i in 1:length(bug$query_id))
+{
+  
+  for(n in 1:bug$count_pages[i])
+  {
+    
+    query = list(
+                 bat_keyword_pages=bug$query_id[i],
+                 sort='td',
+                 page=n,
+                 results='items'
+               )
+    
+    print(bug$query_id[i])
+#    print(query)
+    
+    print(n)
+    print(query)
+    
+  }
+  
+}
+
+
+```
+
+
+
+#Test the for loop
+```{r}
+
+#Initiate the JSON table with a single sample row to ensure records map properly
+#auction_urls <- sample_record
+
+#
+for(i in 1:length(bug$query_id))
+{
+  
+  for(n in 1:bug$count_pages[i])
+  {
+    
+    #pause for 1 second between requests
+    message("Fetching result set ", n, " for query count ",i, " out of ", length(bug$query_id))
+    Sys.sleep(1)
+    #every 10 requests, pause for 5 seconds
+#    if((i %% 10)==0){
+#      message("taking a break")
+#      Sys.sleep(5)
+    
+    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
+               query = list(
+                 bat_keyword_pages=bug$query_id[i],
+                 sort='td',
+                 page=n,
+                 results='items'
+               ),
+               user_agent(ua))
+    
+    #check the status code
+    print(request$status_code)
+    print(query)
+
+      #if request is NOT successful
+      if (request$status_code!=200)
+        {
+          #create a column to associate error codes with the query
+#          bug$error_flag[i] <- request$status_code
+          
+          #return a message in the console noting the result set, query and status code
+          message("Attempt to fetch result set ", n, " for query count ",i, " resulted in error code ", request$status_code)
+          
+        }
+      
+      #else if request returns anything other than a 200 'OK' status code, print the status code
+      else 
+        {
+
+           #parse the JSON object using tidyjson & save as a table
+          result_df <- content(request)$items%>%
+            enter_object%>% # enter into that object, gather&stack array
+            spread_all()%>% # capture the object items under the array
+            as.tbl_json()%>%
+            select(id, url, title, subtitle)
+          
+          #map the query_id to the result set
+          result_df$query_id <- bug$query_id[i]
+#          result_df$page_num <- query[3]
+#          result_df$query_check <- query[1]
+          
+            if (i==1 & n==1)
+            {
+              auction_urls_bug <- result_df
+            }
+          
+            else 
+            {
+              #append the result set to the master table
+              auction_urls_bug<-rbind(auction_urls,result_df)
+            }
+
+        }
+  }
+  
+#  return(auction_urls)
+}
+
+```
+```{r}
+view(auction_urls)
+```
+
+```{r}
+sum(bug$total_results)
+
+n_distinct(auction_urls$id)
+
+left_join(
+  auction_urls%>%
+    group_by(query_id)%>%
+    summarise(count=n_distinct(id))%>%
+    ungroup(),
+  
+  bug%>%
+    select(query_id,total_results),
+)
+```
+
+
+
+```{r}
+auction_urls%>%
+  filter(query_id==1833029)%>%
+  count(n_distinct(id))
+```
+
+
+
+
+```{r}
+request <-GET("https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1833045&sort=td&page=9&results=items"
+              , user_agent(ua))
+content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
+```
+
+```{r}
+request <-GET("https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1939142&sort=td&page=2&results=items"
+              , user_agent(ua))
+content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
+```
+
+```{r}
+request <-GET("https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1939142&sort=td&page=3&results=items"
+              , user_agent(ua))
+content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
+```
+
+```{r}
+request <-GET("https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1939142&sort=td&page=4&results=items"
+              , user_agent(ua))
+content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
+```
+
+```{r}
+content(request)%>%attributes()#$page_maximum
+
+content(request)%>%structure()
+```
+```{r}
+json_test <- content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
+```
+
+#TEST SAVING RESPONSES TO MEMORY
+```{r}
+test_set <- read_csv('../data/auction_urls_aa.csv')[1:20, ]
+```
+```{r}
+for (i in 1:length(test_set$id[1:11])
+     )
+  {
+      #Print status message
+    message("Fetching response for row ",i#, 
+            #" out of ", length(test_set$id)
+            )
+    
+    #Pause for 1 second between requests
+    Sys.sleep(1)
+    
+    #Every 10 requests, pause for 5 seconds
+    if((i %% 10)==0){
+      message("Taking a break")
+      Sys.sleep(3)}
+  
+    request <- GET(test_set$url[i]
+                   ,user_agent(ua)
+                   ,verbose(info = TRUE))
+    
+      #Check the status code
+      #Request is NOT successful
+      if (request$status_code!=200)
+      {
+          #Return a message in the console 
+          message("The attempt to fetch the response for index ", i, 
+              " resulted in error code ", request$status_code)
+        
+          #Store the query id and the error response codes for diagnostics
+          #$mm_df_json$http_error <- mm_df_json$query_id[i]
+      }
+      
+      #Request IS successful
+      else 
+      {
+       # http_response <- request
+        
+        folder_path <- "../data/bat_page_responses/tests/"
+        
+        file_extension <-".rds"
+
+        file_name<-test_set$id[i]%>%
+          as.character()%>%
+          paste0(file_extension)
+        
+        file_location <- folder_path%>%
+          paste0(file_name)
+        
+        readr::write_rds(request, file_location, compress="none")
+
+      }
+  }
+  
+#  return(auction_urls)
+```
+```{r}
+
+readr::write_rds(requestx,"../data/bat_page_responses/requestx.rds")
+
+readr::write_rds(request$url,"../data/bat_page_responses/requestx_url.rds")
+
+readr::write_rds(request$status_code,"../data/bat_page_responses/requestx_status_code.rds")
+
+readr::write_rds(request$headers,"../data/bat_page_responses/requestx_headers.rds")
+
+readr::write_rds(request$all_headers,"../data/bat_page_responses/requestx_all_headers.rds")
+
+readr::write_rds(request$cookies,"../data/bat_page_responses/requestx_cookies.rds")
+
+readr::write_rds(request$content,"../data/bat_page_responses/requestx_content.rds")
+
+readr::write_rds(request$date,"../data/bat_page_responses/requestx_date.rds")
+
+readr::write_rds(request$times,"../data/bat_page_responses/requestx_times.rds")
+
+readr::write_rds(request$request,"../data/bat_page_responses/requestx_request.rds")
+
+readr::write_rds(request$handle,"../data/bat_page_responses/requestx_handle.rds")
+
+```
+```{r}
+
+folder_path <- "../data/bat_page_responses/test/"
+        
+file_extension <-".rds"
+
+file_name<-test_set$id[1]%>%
+  as.character()%>%
+  paste0(file_extension)
+        
+file_location <- folder_path%>%
+          paste0(file_name)
+file_location
+#typeof(test_set$id[1]%>%as.character())       
+#readr::write_rds(request, file_location, compress="none")
+```
+
+
+```{r}
+glimpse(test_set)
+```
+```{r}
+request1<- GET("https://bringatrailer.com/listing/1999-acura-integra-17/")
+request2<- GET("https://bringatrailer.com/listing/2001-acura-integra-gs-r-8/")
+
+test_list<-c(content(request_1),content(request_2))
+```
+```{r}
+
+content(requestx)
+requestx%>%attributes()
+```
+```{r}
+requestx <- GET("https://bringatrailer.com/listing/1999-acura-integra-17/")
+request2<- GET("https://bringatrailer.com/listing/2001-acura-integra-gs-r-8/")
+
+
+```
+
+```{r}
+
+#write_rds(trees, "trees.rds")
+
+# Import trees.rds: trees2
+#trees2 <- read_rds("trees.rds")
+
+# Check whether trees and trees2 are the same
+#identical(trees, trees2)
+
+# readr::save_rds(my_precious, here("results", "my_precious.rds"))
+#my_precious <- readr::read_rds(here("results", "my_precious.rds"))
+
+readr::write_rds(requestx,"../data/requestx.rds", compress="none")
+```
+
+```{r}
+test<-read_rds("../data/bat_page_responses/tests/23926749.rds")
+content(test)%>%html_nodes(xpath='//script[@id="bat-theme-viewmodels-js-extra"]')
+
+```
+```{r}
+requestx2#%>%attributes()
+requestx#%>%attributes()
+#content(requestx2)%>%html_nodes(xpath='//script[@id="bat-theme-viewmodels-js-extra"]')
+```
+
+```{r}
+#requestx%>%attributes()
+#requestx
+
+length(test_list)
+
+test_list
+```
+```{r}
+content(request2)
+```
+
+```{r}
+x <- read_html("https://bringatrailer.com/listing/1999-acura-integra-17/")
+
+x#%>%html_structure()
+```
+
+
+
+
+
