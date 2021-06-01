@@ -1,0 +1,190 @@
+---
+title: "ce_scraping_rmd_to_database"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(httr)
+library(stringr)
+library(rvest)
+library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+#library(R.utils)
+library(tidyjson)
+```
+
+# Obtain a list of file names from the .rds files
+```{r}
+file_list <- list.files(path = "../data/bat_page_responses/group_a/", pattern = NULL, all.files = FALSE,
+           full.names = FALSE, recursive = TRUE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+```
+```{r}
+
+file_list%>%
+  str_remove_all(".rds")%>%
+  str_replace_all("(rows_\\d+_\\d+/)","")
+```
+
+```{r}
+sample_files <- (file_list#%>%
+#                   str_remove_all(".rds")%>%
+#                   str_replace_all("(rows_\\d+_\\d+/)","")
+                 )%>%
+  sample(10)
+```
+```{r}
+sample_files#[1]
+```
+#LISTING ESSENTIALS
+```{r}
+request <- read_rds("../data/bat_page_responses/group_a/"%>%
+                      paste0(sample_files[1]))
+
+request%>%attributes()
+```
+```{r}
+content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+  html_children()
+```
+Lot Number
+```{r}
+lot_number <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=1]')%>%
+  html_text()%>%
+  str_extract("\\d+")
+
+```
+Seller Name
+```{r}
+seller_name <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]')%>%
+  html_text()%>%
+  str_remove("Seller: ")
+```
+
+Seller Profile Link
+```{r}
+seller_profile <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]//a')%>%
+  html_node(xpath='@href')%>%
+  html_text()
+```
+
+Location Name
+```{r}
+location<- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]')%>%
+  html_text()%>%
+  str_remove("Location: ")
+```
+
+Location Google Maps Link
+```{r}
+location_google_maps <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]//a')%>%
+  html_node(xpath='@href')%>%
+  html_text()
+```
+
+Chassis Number
+```{r}
+chassis <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=4]')%>%
+  html_text()%>%
+  str_remove("Chassis: ")
+```
+Odometer
+```{r}
+#odometer <- 
+  content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
+  html_text()
+```
+TMU Indicated?
+```{r}
+tmu <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
+  html_text()%>%
+  str_detect("TMU")
+```
+
+Engine
+```{r}
+engine <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=6]')%>%
+  html_text()
+```
+Transmission
+```{r}
+transmission <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=7]')%>%
+  html_text()
+```
+Private Party or Dealer Listing?
+```{r}
+seller_type <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Private Party Or Dealer")]')%>%
+  html_text()%>%
+  str_remove("Private Party Or Dealer: ")
+```
+
+Additional Dealer Charges?
+```{r}
+dealer_charges <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Additional Charges From This Dealer: USD")]')%>%
+                html_text()%>%
+  str_remove("Additional Charges From This Dealer: USD ")
+
+```
+Model Page
+```{r}
+#NEED TO IDENTIFY SYNTAX FOR SIBLING
+#model_page <- 
+  content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+  html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]/a')%>%
+#  html_children()
+  
+
+  html_nodes(xpath='@href[position()=1]')%>%
+  html_text()
+```
+
+Category Label
+
+Premium Listing?
+
+
+# AUCTION LISTING DETAILS
+Vehicle description text
+```{r}
+vehicle_listing_text <- content(request)%>%
+  html_nodes(xpath='//div[@class="column column-left"]')%>%
+  html_nodes(xpath='div/div[@class="post-excerpt"]//p[text()]')%>%
+  html_text()
+```
+
+Number of videos
+```{r}
+video_count <- content(request)%>%
+  html_nodes(xpath='//div[@class="column column-left"]')%>%
+  html_nodes(xpath='div/div[@class="post-excerpt"]//p/iframe[@src]')%>%
+  length()
+#  html_nodes(xpath='@src')%>%
+#  html_text()#%>%
+#  str_detect("youtube.com")
+#  html_children()%>%html_attrs()
+```
+Number of photos
+```{r}
+#photo_count <- 
+  content(request)%>%
+  html_nodes(xpath='//div[@class="column column-left"]//div[@data-gallery-limit]')%>%
+  html_attr('data-gallery-items')%>%
+  json_schema()
+```
