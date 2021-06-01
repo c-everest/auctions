@@ -19,38 +19,22 @@ library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
 library(tidyjson)
 ```
 
-#Test what the default user agent is
+Manually set user agent to be a very common one
 ```{r}
-# Query webpage with default user agent
-bbc <- GET("https://www.bbc.com/")
-
-# Print default user agent value
-bbc$request$options$useragent
-
-```
-
-#Manually set user agent to be a very common one
-
-```{r}
-# Let's set user agent to a super common one
+#set user agent 
 ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36"
 
-# Query webpage
-bbc <- GET("https://www.bbc.com/",
-           user_agent(ua))
-
-# Confirm it's actually used the desired user agent
-bbc$request$options$useragent
-
 ```
-# PART I. 
 
+# PART I. 
 # From BaT Makes & Models directory, fetch URLs for each unique make-model that has been listed on the site
+
 ```{r}
 request <-GET("https://www.bringatrailer.com/models/"
               , user_agent(ua))
 request$status_code
 ```
+
 Save a list of model names
 ```{r}
 model_names <- content(request)%>%
@@ -83,9 +67,7 @@ mm_df <- as.data.frame(do.call(cbind, list(model_urls,make_models)))%>%
          ,model_name=V2)
 ```
 
-
 Navigate to each model URL and fetch the specific model query id
-
 ```{r}
 #Create column in dataframe and fill with placeholder values
 #mm_df$query_id <- 'x'
@@ -139,16 +121,17 @@ glimpse(mm_df)
 
 view(mm_df)
 ```
-Write mm_df to CSV
+
+Write to CSV
 ```{r}
 #write.csv(mm_df, '../data/mmdf.csv')
 ```
+
 # PART II(a). 
-
 # For each model listed on BaT, use the query_id to collect the JSON objects with every individual vehicle's auction records
-
 # Extract the number of results for each model and the number of pages of JSON results
-Save to mm_df dataframe
+
+Save total_results and count_pages to mm_df dataframe
 ```{r}
 for(i in 1:length(mm_df$query_id))
 
@@ -194,18 +177,20 @@ for(i in 1:length(mm_df$query_id))
 }
 
 ```
+
 Update file saved to memory
 ```{r}
 #write.csv(mm_df, '../data/mmdf.csv')
 ```
 
-# PART II(b). 
-# Not all vehicle make pages return a JSON object. For the 41 rows in mm_df that returned a value of zero in total_results and count_pages, scrape the data directly from the HTML
+# Not all vehicle make pages return a JSON object with this pattern. Save this set separately. 
+
 ```{r}
 mm_df$total_results%>%sum()
 
 nrow(mm_df%>%filter(total_results==0))
 ```
+
 Split mm_df into two dataframes
 ```{r}
 #Make models with URLs that can be extracted from JSON objects
@@ -216,14 +201,17 @@ mm_df_json <- mm_df%>%
 #write.csv(mm_df_json, '../data/mm_df_json.csv', row.names = FALSE)
 
 #Models with URLs that need to be wrangled with html
-mm_df_html <- mm_df%>%
+mm_df_json_b <- mm_df%>%
   filter(count_pages==0)%>%
   mutate(http_error="")
 
-#write.csv(mm_df_html, '../data/mm_df_html.csv', row.names = FALSE)
+#write.csv(mm_df_json_b, '../data/mm_df_json_b.csv', row.names = FALSE)
 ```
 
-Loop over mm_df_json to get the URLs of vehicle listings from the JSON objects
+# PART II(b)
+
+# Loop over mm_df_json to get the URLs of vehicle listings from the JSON objects
+
 ```{r}
 
 for(i in 1:length(mm_df_json$query_id))
@@ -297,12 +285,15 @@ for(i in 1:length(mm_df_json$query_id))
 #  return(auction_urls)
   }
 ```
+
 Check to make sure all values are as expected
 ```{r}
+#Are the total results the same as the unique auction ids?
 sum(mm_df_json$total_results)
 
 n_distinct(auction_urls_a$id)
 
+#Double check total results vs. total unique auction ids grouped by query_id
 left_join(
   auction_urls_a%>%
     group_by(query_id)%>%
@@ -313,7 +304,10 @@ left_join(
     select(query_id,total_results),
 )
 ```
+
 What vehicles appear more than once in this list?
+**Some vehicles are associated with more than one query_id
+eg: Ford F-150 SVT Lightning is tied to two model query_ids: one for Ford F-150 SVT Lightning and one for Ford Pickup
 ```{r}
 sort(table(auction_urls_a$id), decreasing = TRUE)
 ```
@@ -321,481 +315,336 @@ sort(table(auction_urls_a$id), decreasing = TRUE)
 Save to CSV - cast to regular dataframe and select only relevant columns
 ```{r}
 #write.csv(auction_urls_a%>%
-          as.data.frame()%>%
-          select(id, url, title, subtitle, query_id)
-          , '../data/auction_urls_aa.csv'
-          ,row.names = FALSE)
+#          as.data.frame()%>%
+#          select(id, url, title, subtitle, query_id)
+#          , '../data/auction_urls_aa.csv'
+#          ,row.names = FALSE)
 ```
 
 # PART II(c). 
-# Not all vehicle make pages return a JSON object. For the 41 rows in mm_df that returned a value of zero in total_results and count_pages, scrape the data directly from the HTML
+# Not all vehicle make page queries return a JSON object. 41 rows in mm_df that returned a value of zero in total_results and count_pages because the query parameters for certain models are formatted differently.
 
+data-query_args=”{“bat_keyword_pages”:[183300]}” for BMW E34 M5 listings
+vs.
+data-query_args="{“s”:”Packard”}" for Packard listings
 
-Columns in the dataframe we want to create:
-id, url, title, subtitle, query_id
-PLUS - want to fill in the total_results and count_pages values
+Validate this different query patter
 ```{r}
-request<- GET("https://bringatrailer.com/packard/")
+request<- GET("https://bringatrailer.com/hummer/")
 
-request$status_code
+#Part of the auction results are stored in a JSON object in the page code
 
-# Fetch the make/model name combinations of the previous auctions
-#  html_nodes(xpath='//a[@class="previous-listing-image-link"]/div/div/div/div')#%>%
-#  html_nodes(xpath='h2/a[@class="models-page-make-title-link"]')
-```
-
-```{r}
-total_results <- content(request)%>%
+model_results <- content(request)%>%
   html_nodes(xpath='//div[@class="filter-group"]')%>%
   html_attr('data-list')
-total_results
+
+#Attached to this object is the data-query_args key-value pair
+
+#Key
+(content(request)%>%
+  html_nodes(xpath='//div[@class="filter-group"]')%>%
+  html_attr('data-query_args')%>%
+  gather_object()%>%
+  json_types()%>%
+  as_data_frame.tbl_json()%>%
+  select(name)
+  )[[1,1]]
+
+
+#Value
+(content(request)%>%
+  html_nodes(xpath='//div[@class="filter-group"]')%>%
+  html_attr('data-query_args')%>%
+  enter_object()%>%
+  spread_all()%>%
+  as_data_frame.tbl_json()%>%
+  select(s)
+  )[[1,1]]
 ```
-
-
 ```{r}
-#Get JSON object structure as a dataframe
-total_results%>%gather_object()%>%json_types()
-
-#Potentially isolate the number of total vehicles from the object
-total_results%>%enter_object(total)%>%spread_values()
+#mm_df_json_b <- read_csv('../data/mm_df_json_b.csv')
 ```
+Save total_results and count_pages to mm_df_json_b dataframe
 ```{r}
-#Get a JSON table with the vehicle URL listings
-total_results%>%enter_object(items)%>%
-  gather_array()%>%
-  spread_all()#%>%
-#  select(-document.id, -array.index)
-```
+for(i in 1:length(mm_df_json_b$query_id))
 
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-#
-for(i in 1:length(mm_df_json[1:50, ]$query_id))
-{
-
-  for(n in 1:mm_df_json[1:50, ]$count_pages[i])
   {
-    
-    #pause for 1 second between requests
-#    message("Fetching result set ", n, " for query ",i)
-#    Sys.sleep(1)
-    #every 10 requests, pause for 5 seconds
-#    if((i %% 10)==0){
-#      message("taking a break")
-#      Sys.sleep(5)
-    
-    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
-               query = list(
-                 bat_keyword_pages=mm_df_json[1:50, ]$query_id[i],
-                 sort='td',
-                 page=n,
-                 results='items'
-               ),
-               user_agent(ua))
-    
-    #pause for 1 second between requests
-    message("Fetching result set ", n, " for query ",i)
-    Sys.sleep(1)
-    #every 10 requests, pause for 5 seconds
-    if((i %% 10)==0){
-      message("taking a break")
-      Sys.sleep(5)
-    
-    #check the status code
-    request$status_code
-
-      #if request is successful
-      if (request$status_code==200)
-        {
-          #parse the JSON object using tidyjson & save as a table
-          result_df <- content(request)$items%>%
-            enter_object%>% # enter into that object, gather&stack array
-            spread_all()%>% # capture the object items under the array
-            as.tbl_json()%>%
-            select(id, url, title, subtitle)
-          
-          #map the query_id to the result set
-          result_df$query_id <- mm_df_json[1:50, ]$query_id[i]
-        
-          message("Result set ", n, " for query ",i, " record count ", length(result_df$id))
-          
-          #append the result set to the master table
-          auction_urls_json2<-rbind(
-            auction_urls_json2,
-            result_df)
-        }
-      
-      #else if request returns anything other than a 200 'OK' status code, print the status code
-      else 
-        {
-          #create a column to associate error codes with the query
-          #mm_df_json$error_flag[i] <- request$status_code
-          
-          #return a message in the console noting the result set, query and status code
-          message("Attempt to fetch result set ", n, " for query ",i, " resulted in error code ", request$status_code)
-        }
-    }
+  #pause for 1 second between requests
+  message("Getting page ", i)
+  Sys.sleep(1)
+  #every 10 requests, pause for 5 seconds
+  if((i %% 10)==0){
+    message("taking a break")
+    Sys.sleep(3)
   }
-}
-```
-
-
-
-
-```{r}
-request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
-               query = list(
-                 bat_keyword_pages=1833037,
-                 sort='td',
-                 page=1,
-                 results='items'
-               ),
-               user_agent(ua))
-#check the status code
-request$status_code
-    
-content(request)$items%>%
-  enter_object%>% # enter into that object, gather&stack array
-            spread_all()%>% # capture the object items under the array
-            as.tbl_json()
-
-```
-
-
-
-
-
-
-
-```{r}
-#slice <- mm_df%>%
-#  filter(count_pages!=0)%>%
-#  sample_n(3)
-
-urls_test <- json_table%>%sample_n(1)
-
-for(i in 1:length(slice$query_id))
-{
-  for(n in 1:slice$count_pages[i])
-  {
-    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
-               query = list(
-                 bat_keyword_pages=slice$query_id[i],
-                 sort='td',
-                 page=n,
-                 results='items'
-               ),
-               user_agent(ua))
-    #check the status code
-    request$status_code
   
-    json_result <- content(request)$items%>%
-      enter_object%>% # enter into that object, gather&stack array
-      spread_all()%>% # capture the object items under the array
-      as.tbl_json()%>%
-      select(id, url, title, subtitle)
-    
-    json_result$query_id <- slice$query_id[i]
-
-urls_test<-rbind(
-  urls_test,
-  json_result
-  )
-  }
-}
-```
-```{r}
-view(urls_test)
-```
-
-
-```{r}
-json_table <- json_table%>%sample_n(1)
-
-glimpse(json_table)
-```
-
-
-
-Test vehicle - Datsun 240Z
-```{r}
-#query_id 1833054
-
-#https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1833054&sort=td&page=1&results=items
-
-request <-GET("https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?bat_keyword_pages=1833054&sort=td&page=2&results=items"
-              , user_agent(ua))
-request$status_code
-```
-```{r}
-content(request)%>%attributes()#$page_maximum
-
-content(request)%>%structure()
-```
-```{r}
-json_test <- content(request)$items%>%enter_object()%>%spread_all()%>%as.tbl_json()
-```
-
-```{r}
-json_test$query_id <- 1833054
-```
-
-```{r}
-json_test
-```
-# Test code for collecting JSON objects
-```{r}
-request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
-               query = list(
-                 bat_keyword_pages='1833054',
+    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",query = list(
+                 s=mm_df_json_b$model_name[i]%>%
+                   str_replace(" ","-"),
                  sort='td',
                  page='1',
                  results='items'
                ),
-               user_agent(ua)
-)
+               user_agent(ua))
 
-request$status_code
-```
-
-```{r}
-test_df <- as.data.frame(do.call(cbind, list(sample_query
-                                             ,query_results
-                                             ,query_result_pages
-                                             )))%>%
-  rename(sample_query=V1
-         ,query_results=V2
-         ,query_result_pages=V3
-         )
-
-test_df
-```
-```{r}
-#test_df[test_df$query_results !=0 ]#$sample_query
-
-test_df[test_df$query_results !=0, ]$sample_query
-
-#typeof(test_df$sample_query)
-```
-
-```{r}
-request_a <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
-               query = list(
-                 bat_keyword_pages='1833054',
-                 sort='td',
-                 page='1',
-                 results='items'
-               ),
-               user_agent(ua)
-)
-    #check the status code
-```
-
-
-```{r}
-content(request_a)$page_maximum
-
-content(request_a)$total
-```
-
-```{r}
-#Create column in dataframe and fill with placeholder values
-#mm_df$query_id <- 'x'
-
-#Fetch the query id for all models with for loop
-for(i in 1:length(mm_df$model_url)) 
-  
-  if (mm_df$query_id[i]=="x")
-  {
-    #Call the vehicle's specific URL
-    request <-GET(mm_df$model_url[i])
-    
-    #check the status code
-    request$status_code
-    
       #if request is successful, proceed to scraping the page
       if (request$status_code==200)
         {
-          query_id <- content(request)%>%
-            html_nodes(xpath='//link[@rel="shortlink"]')%>%
-            html_node(xpath='@href')%>%
-            html_text()%>%
-            str_extract("\\d+")#%>%
-            #as.numeric()
           
           #replace placeholder column value with the query id
-          mm_df$query_id[i] <- query_id
+          mm_df_json_b$total_results[i] <- content(request)$total
+          
+          mm_df_json_b$count_pages[i] <- content(request)$page_maximum
+
         }
       
       #else if request returns anything other than a 200 'OK' status code, print the status code to the column values
       else 
         {
           #replace placeholder column values
-          mm_df$query_id[i] <- request$status_code
+          mm_df_json_b$total_results[i] <- request$status_code
+          mm_df_json_b$count_pages[i] <- request$status_code
         }
-    
-#    else
- #   {
-#      mm_df$query_id[i] <- mm_df$query_id[i]
-#    }
-  
-  #pause between requests & vary duration
-  #generate sample within given range
-  sleep_seconds <- sample(1:3,3) #(1:5,4)
-  #
-  Sys.sleep(sleep_seconds[(i-1) %% length(sleep_seconds)+1])
-  
 }
-
-glimpse(mm_df)
-
-view(mm_df)
+```
+Save updated mm_df_json_b to csv
+```{r}
+#write.csv(mm_df_json_b%>%
+#          select(!http_error)
+#          , '../data/mm_df_json_b.csv'
+#          ,row.names = FALSE)
 ```
 
-
-
-
-
+Use the total_results and count_pages values to get a list of target_urls for the models in mm_df_json_b
 ```{r}
-view(mm_df)
-```
-
-
-
-
-
-
-
-
-
-
-
-##Access the bids and comment records on page
-
-```{r}
-request <-GET("https://bringatrailer.com/listing/1971-jaguar-xj6/"
-              , user_agent(ua))
-request$status_code
-
-```
-
-
-#for(i in 1:length(test_df[test_df$query_results !=0, ]$sample_query))
-
-
-```{r}
-#content(request)%>%html_structure()
-
-bids_comments <- content(request)%>%html_nodes(xpath='//script[@id="bat-theme-viewmodels-js-extra"]')
-```
-
-```{r}
-typeof(bids_comments)
-
-guts <- bids_comments%>%xml_contents()
-
-guts%>%xml_structure() #%>%xml_cdata()
-
-guts%>%xml_structure()
-```
-```{r}
-
-bids_comments%>%html_structure()
-
-
-#guts
-```
-
-```{r}
-#guts%>%xml_text()%>%str_replace("\\", "")
-
-#str_replace("\\$","")
-
-#bids_comments%>%xml_structure()
+for(i in 1:length(mm_df_json_b$query_id))
+{
+  for(n in 1:mm_df_json_b$count_pages[i])
+  {
+    #Print status message
+    message("Fetching result set ", n, 
+            " for query count ",i, 
+            " out of ", length(mm_df_json_b$query_id))
+    
+    #Pause for 1 second between requests
+    Sys.sleep(1)
+    
+    #Every 10 requests, pause for 5 seconds
+    if((i %% 10)==0){
+      message("Taking a break")
+      Sys.sleep(3)}
   
-bids_comments%>%xml_ns_strip()#%>%
-#  xml_find_all("channels")%>%
-#  xml_text()
+    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
+               query = list(
+                 s=mm_df_json_b$model_name[i]%>%
+                   str_replace(" ","-"),
+                 sort='td',
+                 page=n,
+                 results='items'
+               ),
+               user_agent(ua))
+    
+      #Check the status code
+      #Request is NOT successful
+      if (request$status_code!=200)
+        {
+          #Return a message in the console 
+          message("The attempt to fetch result set ", n, 
+              " for query count ",i, 
+              " resulted in error code ", request$status_code)
+        
+          #Store the query id and the error response codes for diagnostics
+          #mm_df_json_b$http_error[i] <- request$status_code
+        }
+      
+      #Request IS successful
+      else 
+        {
+          #Parse the JSON object using tidyjson & save as a table
+          result_df <- content(request)$items%>%
+            enter_object%>% # enter into that object, gather&stack array
+            spread_all()%>% # capture the object items under the array
+            as.tbl_json()%>%
+            select(id, url, title, subtitle)
+          
+          #Map the query_id to the results dataframe
+          result_df$query_id <- mm_df_json_b$query_id[i]
+          
+            #Create a dataframe with the very first response set
+            if (i==1 & n==1)
+            {
+              auction_urls_b <- result_df
+            }
+            
+            #Append every other response set to that dataframe
+            else 
+            {
+              #append the result set to the master table
+              auction_urls_b <- rbind(auction_urls_b,result_df)
+            }
 
-xml_cd
+        }
+  }
+  
+#  return(auction_urls)
+  }
 ```
+
+Save to CSV - cast to regular dataframe and select only relevant columns
+```{r}
+#write.csv(auction_urls_b%>%
+#          as.data.frame()%>%
+#          select(id, url, title, subtitle, query_id)
+#          , '../data/auction_urls_b.csv'
+#          ,row.names = FALSE)
+
+#auction_urls_b <- read_csv('../data/auction_urls_b.csv')
+```
+
+# Determine what pages were missed in initial batch of scaping
+# First pass at scraping (in notebook titled ce_scraping_http_to_rmd) did not capture every single response
+
+There are 41,895 rows in the auction_urls_a and all 41,895 target urls were queried.  However there are only 40,210 unique auction ids.  This is because auction_urls_a includes the query_id, and a vehicle may be associated with more than one make-model category. 
+```{r}
+n_distinct(auction_urls_a$id)
+
+nrow(auction_urls_a)
+```
+However, the number of .rds files saved is different from the number of files expected. 40,588 were saved. 
+
+Check how many auction ids appeared more than once
+```{r}
+id_multi_rows <- as.data.frame(table(auction_urls_a$id), #row.names = NULL,
+              responseName = "Freq", #stringsAsFactors = TRUE,
+              #sep = "", base = list(LETTERS)
+              )%>%
+  filter(Freq >1)
+
+n_distinct(id_multi_rows$Var1)
+```
+Examine what kinds of auctions have multiple records in this list
+```{r}
+id_multi_detail <- auction_urls_a%>%
+  filter(id %in% id_multi_rows$Var1)
+
+n_distinct(id_multi_detail$id)
+n_distinct(id_multi_detail$url)
+```
+
+# Obtain a list of file names from the .rds files
+```{r}
+file_list <- list.files(path = "../data/bat_page_responses/group_a/", pattern = NULL, all.files = FALSE,
+           full.names = FALSE, recursive = TRUE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
+```
+```{r}
+
+file_list%>%
+  str_remove_all(".rds")%>%
+  str_replace_all("(rows_\\d+_\\d+/)","")
+```
+
 
 ```{r}
-guts2 <- bids_comments%>%xml_contents()%>%xml_text()
+missing_files <- auction_urls_b%>%
+  filter(id %in% (file_list%>%
+                     str_remove_all(".rds")%>%
+                     str_replace_all("(rows_\\d+_\\d+/)","")
+                   )
+         )
+missing_files
 ```
 
-
-<http://w3schools.sinsixx.com/xml/xml_cdata.asp.htm> 
-<https://github.com/STAT545-UBC/Discussion/issues/394>
-```{r}
-typeof(guts2)
-
-guts2%>%str_replace("\\\\","")%>%str_replace_all("\\\\","")%>%writeLines()
-
-#guts2
-#library(stringr)
-#test <- c("hello/world", "no slashes here", "/double/slash")
-#str_replace_all(test, "/", "\\\\")
-#> [1] "hello\\world"    "no slashes here" "\\double\\slash"
-#cat(str_replace_all(test, "/", "\\\\"), sep = "\n")
-#> hello\world
-#> no slashes here
-#> \double\slash
-#3writeLines(str_replace_all(test, "/", "\\\\"))
-#> hello\world
-#> no slashes here
-#> \double\slash
-```
+# Check MASTER LIST of auction results
+<https://bringatrailer.com/auctions/results/>
+<https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?page=1&sort=td&results=items>
 
 ```{r}
-guts2%>%gather_object()
+for(i in 1:1527)
+{
+#  for(n in 1:mm_df_json_b$count_pages[i])
+  {
+    #Print status message
+    message("Fetching result set ", i, 
+            " out of ", 1527)
+    
+    #Pause for 1 second between requests
+    Sys.sleep(1)
+    
+    #Every 10 requests, pause for 2 seconds
+    if((i %% 10)==0){
+      message("Taking a break")
+      Sys.sleep(2)}
+  
+    request <- GET(url = "https://bringatrailer.com/wp-json/bringatrailer/1.0/data/keyword-filter?",
+               query = list(
+                 sort='td',
+                 page=i,
+                 results='items'
+               ),
+               user_agent(ua))
+    
+      #Check the status code
+      #Request is NOT successful
+      if (request$status_code!=200)
+        {
+          #Return a message in the console 
+          message("The attempt to fetch result set ", i, 
+              " resulted in error code ", request$status_code)
+        }
+      
+      #Request IS successful
+      else 
+        {
+          #Parse the JSON object using tidyjson & save as a table
+          result_df <- content(request)$items%>%
+            enter_object%>% # enter into that object, gather&stack array
+            spread_all()%>% # capture the object items under the array
+            as.tbl_json()%>%
+            select(id, url, title, subtitle)
+          
+            #Create a dataframe with the very first response set
+            if (i==1)
+            {
+              auction_urls_master <- result_df
+            }
+            
+            #Append every other response set to that dataframe
+            else 
+            {
+              #append the result set to the master table
+              auction_urls_master <- rbind(auction_urls_master,result_df)
+            }
 
-#total_results%>%gather_object()%>%json_types()
-
-#Potentially isolate the number of total vehicles from the object
-#total_results%>%enter_object(total)%>%spread_values()
+        }
+  }
+  
+  }
 ```
-
-
-# SCRAPS
-
 ```{r}
-#  html_nodes(xpath='//div')%>%
-#  read_html()
-
-#  html_nodes(xpath='//div[@class="make-item"]')%>%
-
-# Fetch the make/model name combinations of the previous auctions
-#  html_nodes(xpath='//a[@class="previous-listing-image-link"]/div/div/div/div')#%>%
-#  html_nodes(xpath='h2/a[@class="models-page-make-title-link"]')#%>%
-
-# Fetch the URL of the make/model of previous auctions
-#  html_nodes(xpath='h2/div/a[@class="previous-listing-image-link"]')
-
+#view(auction_urls_master)
+auction_urls_master_312 <- auction_urls_master
 ```
 
+Save to CSV - cast to regular dataframe and select only relevant columns
 ```{r}
-XML Option
-```{r}
-total_results_xml <- content(request)%>%xml_nodes(xpath='//div[@class="filter-group"]')%>%
-  xml_attr('data-list')#%>%
-  #xml_text()
+#write.csv(auction_urls_master_312%>%
+#          as.data.frame()%>%
+#          select(id, url, title, subtitle)
+#          , '../data/auction_urls_master_312.csv'
+#          ,row.names = FALSE)
 
-total_results_b
-#total_results_b%>%enter_object()%>%spread_values()
-#total_results_b%>%json_schema()
-#total_results_b%>%json_structure()
+#auction_urls_b <- read_csv('../data/auction_urls_b.csv')
 ```
-```
+
+
+
+
+
+
+
+
+
+
+
 
