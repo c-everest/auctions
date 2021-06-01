@@ -25,7 +25,7 @@ ua <- "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
 
 Read in file with target_urls
 ```{r}
-target_urls <- read.csv('../data/auction_urls_aa.csv')
+target_urls <- read.csv('../data/auction_urls_b.csv')
 
 
 target_urls <- target_urls%>%
@@ -33,31 +33,40 @@ target_urls <- target_urls%>%
 
 glimpse(target_urls)
 ```
+
 Define 
 ```{r}
-start <- 1
-end <- 500
+#start <- 10001
+#end <- 15000
+
 ```
 
+Fetch the pages
 ```{r}
-for (i in start:length(target_urls$id[start:end])
-     )
+for (i in 1:length(target_urls$query_id))
+     
   {
-      #Print status message
+    #Print status message
     message("Fetching response for row "
             , i
-            , " out of "
-            , length(target_urls$id[start:end])
+            , " of "
+            , length(target_urls$query_id)
             )
     
-    #Pause for 1 second between requests
+    #Pause for 1 second between each request
     Sys.sleep(1)
     
     #Every 10 requests, pause for 3-5 seconds
     if((i %% 10)==0){
       message("Taking a break")
-      Sys.sleep(sample(3:5,3))}
+      Sys.sleep(2)}
+    
+    #Every 500 requests, pause for 20-30 seconds
+    if((i %% 500)==0){
+      message("Taking a break")
+      Sys.sleep(sample(5:6,2))}
   
+    #Make the request
     request <- GET(target_urls$url[i]
                    ,user_agent(ua)
                    ,verbose(info = TRUE))
@@ -76,16 +85,16 @@ for (i in start:length(target_urls$id[start:end])
           target_urls$http_error <- request$status_code
       }
       
-      #Request IS successful
+      #Request IS successful - save entire request to local memory
       else 
       {
        # http_response <- request
-        folder_name <- "rows_"%>%
-          paste0(start%>%as.character())%>%
-          paste0("_")%>%
-          paste0(end%>%as.character())
+        folder_name <- "rows_1_1933"#%>%
+          #paste0(start%>%as.character())%>%
+          #paste0("_")%>%
+          #paste0(end%>%as.character())
     
-        folder_path <- "../data/bat_page_responses/group_a/"%>%
+        folder_path <- "../data/bat_page_responses/group_b/"%>%
           paste0(folder_name)%>%
           paste0("/")
         
