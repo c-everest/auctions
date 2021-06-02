@@ -14,6 +14,8 @@ library(rvest)
 library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
 #library(R.utils)
 library(tidyjson)
+library(reticulate)
+library(jsonlite)
 ```
 
 # Obtain a list of file names from the .rds files
@@ -57,7 +59,7 @@ lot_number <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=1]')%>%
   html_text()%>%
   str_extract("\\d+")
-
+lot_number
 ```
 Seller Name
 ```{r}
@@ -65,6 +67,7 @@ seller_name <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]')%>%
   html_text()%>%
   str_remove("Seller: ")
+seller_name
 ```
 
 Seller Profile Link
@@ -73,6 +76,8 @@ seller_profile <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]//a')%>%
   html_node(xpath='@href')%>%
   html_text()
+
+seller_profile
 ```
 
 Location Name
@@ -81,6 +86,8 @@ location<- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]')%>%
   html_text()%>%
   str_remove("Location: ")
+
+location
 ```
 
 Location Google Maps Link
@@ -89,6 +96,8 @@ location_google_maps <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]//a')%>%
   html_node(xpath='@href')%>%
   html_text()
+
+location_google_maps
 ```
 
 Chassis Number
@@ -97,13 +106,16 @@ chassis <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=4]')%>%
   html_text()%>%
   str_remove("Chassis: ")
+
+chassis
 ```
 Odometer
 ```{r}
-#odometer <- 
-  content(request)%>%
+odometer <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
   html_text()
+
+odometer
 ```
 TMU Indicated?
 ```{r}
@@ -111,6 +123,8 @@ tmu <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
   html_text()%>%
   str_detect("TMU")
+
+tmu
 ```
 
 Engine
@@ -118,19 +132,26 @@ Engine
 engine <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=6]')%>%
   html_text()
+
+engine
 ```
 Transmission
 ```{r}
 transmission <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=7]')%>%
   html_text()
+
+transmission
 ```
 Private Party or Dealer Listing?
 ```{r}
 seller_type <- content(request)%>%
-  html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Private Party Or Dealer")]')%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Private Party Or Dealer") or contains(text(),"Private Party or Dealer")]')%>%
   html_text()%>%
-  str_remove("Private Party Or Dealer: ")
+  tolower()%>%
+  str_remove("private party or dealer: ")
+
+seller_type
 ```
 
 Additional Dealer Charges?
@@ -139,7 +160,7 @@ dealer_charges <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Additional Charges From This Dealer: USD")]')%>%
                 html_text()%>%
   str_remove("Additional Charges From This Dealer: USD ")
-
+dealer_charges
 ```
 Model Page
 ```{r}
@@ -148,17 +169,42 @@ Model Page
   content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
   html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]/a')%>%
-#  html_children()
-  
-
   html_nodes(xpath='@href[position()=1]')%>%
   html_text()
 ```
+```{r}
+request<- GET('https://bringatrailer.com/listing/2011-bmw-m3-121/')
+```
 
-Category Label
+Model Tag
+```{r}
+model_tag <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+  html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]//a[not(@rel)]')%>%
+  html_text()%>%
+  str_remove("Premium")
+model_tag
+```
+Category Tag
+```{r}
+category_tag <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+  html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]//a[@rel="category tag"]')%>%
+  html_text()
+
+category_tag
+```
 
 Premium Listing?
-
+```{r}
+#NEED TO IDENTIFY SYNTAX FOR SIBLING a//text()
+premium <- content(request)%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+  html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]//a[not(@rel)][last()]')%>%
+  html_text()%>%
+  str_detect("Premium")
+premium
+```
 
 # AUCTION LISTING DETAILS
 Vehicle description text
@@ -167,9 +213,11 @@ vehicle_listing_text <- content(request)%>%
   html_nodes(xpath='//div[@class="column column-left"]')%>%
   html_nodes(xpath='div/div[@class="post-excerpt"]//p[text()]')%>%
   html_text()
+
+vehicle_listing_text
 ```
 
-Number of videos
+Number of videos -- SECONDARY
 ```{r}
 video_count <- content(request)%>%
   html_nodes(xpath='//div[@class="column column-left"]')%>%
@@ -179,12 +227,43 @@ video_count <- content(request)%>%
 #  html_text()#%>%
 #  str_detect("youtube.com")
 #  html_children()%>%html_attrs()
+
+video_count
 ```
-Number of photos
+
+Listing Nicknames
 ```{r}
-#photo_count <- 
+#listing_nicknames <- 
   content(request)%>%
-  html_nodes(xpath='//div[@class="column column-left"]//div[@data-gallery-limit]')%>%
-  html_attr('data-gallery-items')%>%
-  json_schema()
+  html_nodes(xpath='//div[@class="column column-left"]//div//div[@class="listing-nicknames"]')%>%#[@data-gallery-items]
+#  html_children()
+  html_text()
 ```
+
+Number of photos
+
+```{r}
+photos <- content(request)%>%
+  #navigate to the photo gallery node
+  html_nodes(xpath='//div[@class="column column-left"]//div[@data-gallery-limit]')%>%
+  #access the contents of the attribute @data-gallery-items
+  html_attr('data-gallery-items')%>%
+  #remove backslashes that are escape characters
+  str_replace("\\\\","")%>%
+  #remove the rest of the escape characters
+  str_replace_all("\\\\","")%>%
+  #enter the object and collapse the JSON array into index-value pairs at this level
+  gather_array("levels.2")%>%
+  #spread all scalar elements into new columns
+  spread_all()%>%
+  as.tbl_json()
+
+photo_count <- n_distinct(photos$id)
+```
+
+
+
+
+
+
+
