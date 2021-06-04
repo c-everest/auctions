@@ -12,6 +12,7 @@ library(httr)
 library(stringr)
 library(rvest)
 library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+library(XML)
 #library(R.utils)
 library(tidyjson)
 library(reticulate)
@@ -109,11 +110,13 @@ chassis <- content(request)%>%
 
 chassis
 ```
+
 Odometer
 ```{r}
 odometer <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
-  html_text()
+  html_text()%>%
+  str_remove("TMU")
 
 odometer
 ```
@@ -159,7 +162,8 @@ Additional Dealer Charges?
 dealer_charges <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Additional Charges From This Dealer: USD")]')%>%
                 html_text()%>%
-  str_remove("Additional Charges From This Dealer: USD ")
+  parse_number()
+  #str_remove("Additional Charges From This Dealer: USD ")
 dealer_charges
 ```
 Model Page
@@ -171,9 +175,6 @@ Model Page
   html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]/a')%>%
   html_nodes(xpath='@href[position()=1]')%>%
   html_text()
-```
-```{r}
-request<- GET('https://bringatrailer.com/listing/2011-bmw-m3-121/')
 ```
 
 Model Tag
@@ -203,6 +204,7 @@ premium <- content(request)%>%
   html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]//a[not(@rel)][last()]')%>%
   html_text()%>%
   str_detect("Premium")
+
 premium
 ```
 
@@ -217,7 +219,7 @@ vehicle_listing_text <- content(request)%>%
 vehicle_listing_text
 ```
 
-Number of videos -- SECONDARY
+Number of videos
 ```{r}
 video_count <- content(request)%>%
   html_nodes(xpath='//div[@class="column column-left"]')%>%
@@ -232,8 +234,9 @@ video_count
 ```
 
 Listing Nicknames
+
 ```{r}
-#listing_nicknames <- 
+listing_nicknames <- 
   content(request)%>%
   html_nodes(xpath='//div[@class="column column-left"]//div//div[@class="listing-nicknames"]')%>%#[@data-gallery-items]
 #  html_children()
@@ -261,9 +264,252 @@ photos <- content(request)%>%
 photo_count <- n_distinct(photos$id)
 ```
 
+#AUCTION RESULTS
+
+```{r}
+request1<- GET("https://bringatrailer.com/listing/2006-ford-gt-33/")
+
+request2<- GET("https://bringatrailer.com/listing/1960-land-rover-88-series-ii-4x4-6/")
+
+request3<- GET("https://bringatrailer.com/listing/2001-acura-integra-gs-r-7/")
+
+request4<- GET("https://bringatrailer.com/listing/2004-porsche-911-gt3-rs/")
+```
+
+Auction Outcome
+```{r}
+auction_outcome <- content(request4)%>%
+  html_nodes(xpath='//div[@class="listing-available-info"]//span[@class="data-label" and position()=1]')%>%
+  html_text()%>%
+  tolower()%>%
+  switch("sold for" = "sold"
+       , "bid to" = "reserve not met"
+       , "withdrawn on" = "withdrawn"
+       , "current bid:" = "ongoing"
+       )
+
+auction_outcome
+```
+Whether Auction is Live or Not
+```{r}
+auction_live <- content(request4)%>%
+  html_nodes(xpath='//div[@class="listing-available-info"]//span[@class="data-label" and position()=1]')%>%
+  html_text()%>%
+  tolower()%>%
+  str_detect("current bid:")
+
+auction_live
+```
+
+Final Bid Type- winning bid or high bid
+```{r}
+final_bid_type <- content(request)%>%
+  html_nodes(xpath='//div[@class="column column-left"]//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]/tbody//tr[position()=1]//td[@class="listing-stats-label"]')%>%
+  html_text()%>%
+  tolower()%>%
+  str_remove(" bid")
+
+final_bid_type
+```
+
+
+Final Bid Amount(USD)
+```{r}
+final_bid_amount <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
+  #from table body select first table row that also has the specified class
+  html_nodes(xpath='//tbody//tr[position()=1 and @class="listing-stats-stat"]')%>%
+  #from this row, select second table data item with the specified class
+  html_nodes(xpath='td[position()=2 and @class="listing-stats-value"]')%>%
+  #select the <span> tag that does NOT have the high bidder link attribute
+  html_nodes(xpath='span[not(@data-listing-high-bidder-link)]')%>%
+  html_text()%>%
+  parse_number()
+
+
+final_bid_amount
+
+```
+
+Winning Bidder Username
+```{r}
+winner_username <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
+  #from table body select first table row that also has the specified class
+  html_nodes(xpath='//tbody//tr[position()=1 and @class="listing-stats-stat"]')%>%
+  #from this row, select second table data item with the specified class
+  html_nodes(xpath='td[position()=2 and @class="listing-stats-value"]')%>%
+  #select the <a> tag that contains the relevant text
+  html_nodes(xpath='span[@data-listing-high-bidder-link]/a')%>%
+  html_text()
+
+winner_username
+```
+
+Winning Bidder Profile Link
+```{r}
+winner_profile <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
+  #from table body select first table row that also has the specified class
+  html_nodes(xpath='//tbody//tr[position()=1 and @class="listing-stats-stat"]')%>%
+  #from this row, select second table data item with the specified class
+  html_nodes(xpath='td[position()=2 and @class="listing-stats-value"]')%>%
+  #select the <a> tag that contains the url
+  html_nodes(xpath='span[@data-listing-high-bidder-link]/a')%>%
+  #extract url as text
+  html_nodes(xpath='@href')%>%
+  html_text()
+
+winner_profile
+```
+Date & Time of Auction End
+**TIMEZONE LABEL "PT" IS UNSTABLE
+```{r}
+auction_ended <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
+  #from table body select first table row that also has the specified class
+  html_nodes(xpath='//tbody//tr[@class="listing-stats-stat"]')%>%
+  #from this row, select second table data item with the specified class
+  html_nodes(xpath='td[@class="listing-stats-value"]//span[@data-ends]')%>%
+  html_text()%>%
+  str_remove_all("at")%>%
+#  str_replace("PT","US/Pacific")%>%
+  parse_datetime("%B %d, %Y %H:%M %p %Z")
+
+auction_ended
+```
+
+Total Bids in Auction
+
+```{r}
+total_bids <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
+  #tables rows that contain the specified class
+  html_nodes(xpath='//tbody//tr[@class="listing-stats-stat"]')%>%
+  #from this row, select second table data item with the specified class
+  html_nodes(xpath='td[@class="listing-stats-value number-bids-value"]')%>%
+  html_text()
+
+total_bids
+```
+Total Views of Auction
+```{r}
+views <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@id="listing-actions-stats"]')%>%
+  #tables rows that contain the specified attribute
+  html_nodes(xpath='tbody//tr//td//span[@data-stats-item="views"]')%>%
+  html_text()%>%
+  #parse for only digits
+  parse_number()
+
+views
+```
+
+Total Number Views of Auction
+
+```{r}
+watchers <- content(request)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div[@id="listing-bid-container"]/table[@id="listing-actions-stats"]')%>%
+  #tables rows that contain the specified attribute
+  html_nodes(xpath='tbody//tr//td//span[@data-stats-item="watchers"]')%>%
+  html_text()%>%
+  #parse for only digits
+  parse_number()
+
+watchers
+```
+#AUCTION COMMENT & BID HISTORY
+
+
+```{r}
+#history <-
+content(request)%>%
+  html_nodes(xpath='//script[@id="bat-theme-viewmodels-js-extra"]')%>%
+  html_text()
+
+```
 
 
 
+
+```{r}
+guts <- content(request)%>%
+  html_nodes(xpath='//script[@id="bat-theme-viewmodels-js-extra"]')
+
+guts<- guts%>%xml_contents()%>%
+  xml_text()#%>%
+ # str_replace("\\\\","")%>%
+  #remove the rest of the escape characters
+ # str_replace_all("\\\\","")%>%
+ # str_replace_all("\\\\","")
+  #enter the object and collapse the JSON array into index-value pairs at this level
+#  gather_array("levels.2")%>%
+  #spread all scalar elements into new columns
+#  spread_all()%>%
+ # as.tbl_json()
+
+```
+```{r}
+guts%>%
+  str_replace("var BAT_VMS =","")%>%
+#  str_replace_all("\\\\","")%>%
+  str_remove_all("<")%>%
+  str_remove_all(">")%>%
+  str_remove_all(";")%>%
+  json_schema()
+
+guts%>%
+  str_replace("var BAT_VMS =","")%>%
+#  str_replace_all("\\\\","")%>%
+  str_remove_all("<")%>%
+  str_remove_all(">")%>%
+  str_remove_all(";")%>%
+  json_structure()
+  
+```
+```{r}
+guts%>%
+  str_replace("var BAT_VMS =","")%>%
+#  str_replace_all("\\\\","")%>%
+  str_remove_all("<")%>%
+  str_remove_all(">")%>%
+  str_remove_all(";")%>%
+  gather_array("level.3")%>%
+  #spread all scalar elements into new columns
+  spread_all()%>%
+  as.tbl_json()
+```
+
+
+```{r}
+guts
+```
+
+
+
+```{r}
+
+
+str_replace("\\\\","")%>%
+  #remove the rest of the escape characters
+  str_replace_all("\\\\","")%>%
+  #enter the object and collapse the JSON array into index-value pairs at this level
+  gather_array("levels.2")%>%
+  #spread all scalar elements into new columns
+  spread_all()%>%
+  as.tbl_json()
+guts%>%
+  xml_contents()%>%
+  xml_text()%>%
+  parse_character()
+```
 
 
 
