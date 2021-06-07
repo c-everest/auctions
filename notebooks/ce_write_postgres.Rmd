@@ -1,0 +1,174 @@
+---
+title: "ce_write_postgres"
+output: html_document
+description: Load Postgres database
+---
+
+```{r,echo = FALSE}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(httr)
+library(stringr)
+library(rvest)
+library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+library(XML)
+#library(R.utils)
+library(tidyjson)
+library(reticulate)
+library(jsonlite)
+library(DBI)
+library(RPostgres)
+library(odbc)
+library(lubridate)
+```
+
+Create connection via ODBC
+```{r}
+con <- dbConnect(odbc(),# odbc
+                 driver='PostgreSQL Driver',
+                 database = 'bat',     # Name of the database we want to connect to
+                 host = 'localhost',         # 'localhost' or eg. 'ec2-54-83-201-96.compute-1.amazonaws.com'
+                 port = 5432, 
+                 uid = 'postgres',
+                 pwd = 'postgres')
+
+
+odbc::odbcListDrivers()
+```
+
+Check tables in database
+```{r}
+dbListTables(con)
+```
+
+#Load summary data - these can be used to map vehicle categories
+
+Models
+```{r}
+models <- read_csv('../data/mmdf.csv')[-1]
+glimpse(models)
+```
+
+Auctions
+```{r}
+auction_urls_a <- read_csv('../data/auction_urls_a.csv')
+auction_urls_b <- read_csv('../data/auction_urls_b.csv')
+auctions <- rbind(auction_urls_a, auction_urls_b)
+```
+
+```{r}
+#dbCreateTable(con, "models", models)
+#dbAppendTable(con, "models", models)
+#dbCreateTable(con, "auctions", auctions)
+#dbAppendTable(con, "auctions", auctions)
+```
+
+```{r}
+dbListFields(con, 'models')
+dbListFields(con,'auctions')
+```
+#Auction Results Table
+```{r}
+r_a <- read_csv('../data/results_1_500.csv')
+r_b <- read_csv('../data/results_501_5000.csv', n_max = 4241)
+r_c <- read_csv('../data/results_5001_10000.csv')
+r_d <- read_csv('../data/results_10001_15000.csv')
+r_e <- read_csv('../data/results_16354_20000.csv')
+r_f <- read_csv('../data/results_20001_22757.csv')
+r_g <- read_csv('../data/results_36896_41895.csv')
+r_h <- read_csv('../data/results_22758_36895.csv')
+```
+
+```{r}
+auction_results <- rbind(r_a, r_b, r_c, r_d, r_e, r_f, r_g)
+glimpse(auction_results)
+```
+
+```{r}
+#Clean up the last bits of <span/> clutter
+
+r_h$final_bid_amount <- r_h$final_bid_amount%>%as.numeric()
+```
+
+```{r}
+#dbCreateTable(con, "auction_results", auction_results)
+#dbAppendTable(con, "auction_results", r_h)
+```
+
+
+#Auction Listing Essentials Table
+```{r}
+l_a <- read_csv('../data/essentials_1_500.csv')
+l_b <- read_csv('../data/essentials_501_5000.csv', n_max = 4241)
+l_c <- read_csv('../data/essentials_5001_10000.csv')
+l_d <- read_csv('../data/essentials_10001_15000.csv')
+l_e <- read_csv('../data/essentials_16354_20000.csv')
+l_f <- read_csv('../data/essentials_20001_22757.csv')
+l_g <- read_csv('../data/essentials_36896_41895.csv')
+l_h <- read_csv('../data/essentials_22758_36895.csv')
+```
+
+```{r}
+l_a$tmu<-l_a$odometer%>%
+  str_detect('tmu')
+```
+
+
+```{r}
+listing_essentials <- bind_rows(l_a, l_b, l_c, l_d, l_e, l_f, l_g)
+
+glimpse(listing_essentials)
+```
+```{r}
+view(listing_essentials)
+```
+
+```{r}
+state.abb
+state.name
+```
+```{r}
+#listing_essentials <- 
+#  listing_essentials%>%
+#  separate(location, c("city","state_country"), sep=",", extra = "merge", #fill="left")%>%trimws()
+```
+```{r}
+america <- c(state.abb, state.name)%>%as.list()
+```
+
+```{r}
+'California' %in% state.name
+```
+Extract/impute mileage - quick & dirty, due to messy, inconsistent text data
+
+```{r}
+l_h$est_mileage <- 
+  l_h$odometer%>%
+  #drop km indicators 
+             str_remove('kilometers|km')%>% 
+  #replace where k is likely to be shorthand 
+             str_replace('k','000')%>% 
+  #remove secondary mileage notations in parentheses
+              str_remove('\\(.*\\)')%>% 
+              str_remove(',')%>%
+  #remove total mileage unknown indicators
+              str_remove('tmu - ')%>%
+  #drop everything that's not a number
+              str_remove_all("[:alpha:]")%>%
+  #parse remaining numbers
+              parse_number(trim_ws=TRUE, na = c("tmu", "NA"))
+        
+#           %>%
+
+```
+```{r}
+#dbCreateTable(con, "listing_essentials", listing_essentials)
+#dbAppendTable(con, "listing_essentials", l_h)
+```
+
+
+
+
+
