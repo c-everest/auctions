@@ -1,0 +1,262 @@
+---
+title: "ce_execute_scraping_rds"
+output: html_document
+description: Apply scraping functions to http page responses saved as rds.
+---
+
+```{r,echo = FALSE}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(httr)
+library(stringr)
+library(rvest)
+library(xml2)  #XML package no longer maintained. xml2 is a newer wrapper
+library(XML)
+#library(R.utils)
+library(tidyjson)
+library(reticulate)
+library(jsonlite)
+```
+
+
+#Create list of auction ids of 'withdrawan' status
+Won't extract these records with the completed auctions
+```{r}
+withdrawn_auctions <- auctions%>%
+  filter(str_detect(subtitle,"Withdrawn"))%>%
+  select(id)%>%
+  as.list()
+```
+
+
+# Obtain a list of target file names
+```{r}
+file_list <- list.files(path = "../data/bat_page_responses/group_a/rows_20001_22757", pattern = NULL, all.files = FALSE,
+           full.names = TRUE, recursive = TRUE,
+           ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)#%>%
+#  sample(50)
+
+```
+
+#Create dataframes for each database table and columns for the selected features to extract.
+```{r}
+listing_essentials <- file_list%>%
+        str_remove(".rds")%>%
+        str_remove("../data/bat_page_responses/group_a/rows_20001_22757/")%>%data.frame()
+
+colnames(listing_essentials) <- "id"
+
+#listing_essentials<-listing_essentials#%>%
+#  filter(!id %in% withdrawn_auctions)
+listing_essentials$lot_number<-NA
+listing_essentials$seller_name <- NA
+listing_essentials$location=NA
+listing_essentials$odometer = NA
+listing_essentials$tmu = NA
+listing_essentials$engine = NA
+listing_essentials$transmission = NA
+listing_essentials$seller_type = NA
+listing_essentials$category_tag = NA
+listing_essentials$premium = NA
+
+
+glimpse(listing_essentials)
+
+
+auction_results <- file_list%>%
+        str_remove(".rds")%>%
+        str_remove("../data/bat_page_responses/group_a/rows_20001_22757/")%>%data.frame()
+
+colnames(auction_results) <- "id"
+
+auction_results$auction_outcome <- NA
+auction_results$auction_live <- NA
+auction_results$final_bid_type <- NA
+auction_results$final_bid_amount <- NA
+auction_results$winner_username <- NA
+auction_results$auction_ended <- NA
+auction_results$auction_bids <- NA
+auction_results$auction_views <- NA
+auction_results$auction_watchers <- NA
+
+glimpse(auction_results)
+```
+
+
+```{r,echo = FALSE}
+for (i in 1:length(listing_essentials$id))
+     
+  {   
+       file = ("../data/bat_page_responses/group_a/rows_20001_22757/") %>%
+        paste0(listing_essentials$id[i]) %>%
+        paste0(".rds")
+      
+      print(file)
+      
+      request <- read_rds(file)
+      
+      #print(request$url)
+#      print(request %>% attributes())
+      
+      listing_essentials$lot_number[i] <-
+        content(request) %>% scrape_lot_number()
+      
+#      print(listing_essentials$lot_number[i])
+#      print(typeof(listing_essentials$lot_number[i]))
+#      print(length(listing_essentials$lot_number[i]))
+      
+      listing_essentials$seller_name[i] <-
+        content(request) %>% scrape_seller_name()
+      
+#      print(listing_essentials$seller_name[i])
+#      print(typeof(listing_essentials$seller_name[i]))
+#      print(length(listing_essentials$seller_name[i]))
+      
+      listing_essentials$location[i] <-
+        content(request) %>% scrape_location()
+#      print(listing_essentials$location[i])
+#      print(typeof(listing_essentials$location[i]))
+#      print(length(listing_essentials$location[i]))
+      
+      listing_essentials$odometer[i] <-
+        content(request) %>% scrape_odometer()
+#      print(listing_essentials$odometer[i])
+#      print(typeof(listing_essentials$odometer[i]))
+#      print(length(listing_essentials$odometer[[i]]))
+      
+      listing_essentials$tmu[i] <- content(request)%>%scrape_tmu()
+#      print(listing_essentials$tmu[i])
+#      print(typeof(listing_essentials$tmu[i]))
+#      print(length(listing_essentials$tmu[i]))
+      
+      listing_essentials$engine[i] <-
+        content(request) %>% scrape_engine()
+#      print(listing_essentials$engine[i])
+#      print(typeof(listing_essentials$engine[i]))
+#      print(length(listing_essentials$engine[i]))
+      
+      listing_essentials$transmission[i] <-
+        content(request) %>% scrape_transmission()
+#      print(listing_essentials$transmission[i])
+#      print(typeof(listing_essentials$transmission[i]))
+#      print(length(listing_essentials$transmission[i]))
+      
+      listing_essentials$seller_type[i] <-
+        content(request) %>% scrape_seller_type()
+#      print(listing_essentials$seller_type[i])
+#      print(typeof(listing_essentials$seller_type[i]))
+#      print(length(listing_essentials$seller_type[i]))
+      
+      
+      listing_essentials$premium[i] <-
+        content(request) %>% scrape_premium()
+#      print(listing_essentials$premium[i])
+#      print(typeof(listing_essentials$premium[i]))
+#      print(length(listing_essentials$premium[i]))
+      
+      listing_essentials$category_tag[i] <-
+        content(request) %>% scrape_category_tag()
+#      print(listing_essentials$category_tag[i])
+#      print(typeof(listing_essentials$category_tag[i]))
+#      print(length(listing_essentials$category_tag[i]))
+      
+      #overall outcome
+      auction_results$auction_outcome[i] <-
+        content(request) %>% scrape_auction_outcome()
+      
+#      print(auction_results$auction_outcome[i])
+#      print(typeof(auction_results$auction_outcome[i]))
+#      print(length(auction_results$auction_outcome[i]))
+      
+      #live auction or not?
+      auction_results$auction_live[i] <-
+        content(request) %>% scrape_auction_live()
+      
+#      print(auction_results$auction_live[i])
+#      print(typeof(auction_results$auction_live[i]))
+#      print(length(auction_results$auction_live[i]))
+      
+      #final bid type
+      auction_results$final_bid_type[i] <-
+        content(request) %>% scrape_final_bid_type()
+      
+#      print(auction_results$final_bid_type[i])
+#      print(typeof(auction_results$final_bid_type[i]))
+#      print(length(auction_results$final_bid_type[i]))
+      
+      #final bid amount
+      auction_results$final_bid_amount[i] <-
+        content(request) %>% scrape_final_bid_amount()
+      
+#      print(auction_results$final_bid_amount[i])
+#      print(typeof(auction_results$final_bid_amount[i]))
+#      print(length(auction_results$final_bid_amount[i]))
+      
+      #winner username
+      auction_results$winner_username[i] <-
+        content(request) %>% scrape_winner_username()
+      
+#      print(auction_results$winner_username[i])
+#      print(typeof(auction_results$winner_username[i]))
+#      print(length(auction_results$winner_username[i]))
+      
+      #datetime of auction close
+      auction_results$auction_ended[i] <-
+        content(request) %>% scrape_auction_ended()
+      
+#      print(auction_results$auction_ended[i])
+#      print(typeof(auction_results$auction_ended[i]))
+#      print(length(auction_results$auction_ended[i]))
+      
+      #number of bids
+      auction_results$auction_bids[i] <-
+        content(request) %>% scrape_auction_bids()
+      
+#      print(auction_results$auction_bids[i])
+#      print(typeof(auction_results$auction_bids[i]))
+#      print(length(auction_results$auction_bids[i]))
+      
+      #number of views
+      auction_results$auction_views[i] <-
+        content(request) %>% scrape_auction_views()
+      
+#      print(auction_results$auction_views[i])
+#      print(typeof(auction_results$auction_views[i]))
+#      print(length(auction_results$auction_views[i]))
+      
+      #number users watching auction
+      auction_results$auction_watchers[i] <-
+        content(request) %>% scrape_auction_watchers()
+      
+#      print(auction_results$auction_watchers[i])
+#      print(typeof(auction_results$auction_watchers[i]))
+#      print(length(auction_results$auction_watchers[i]))
+  }
+
+glimpse(listing_essentials)
+view(listing_essentials)
+glimpse(auction_results)
+view(auction_results)
+#write_csv(listing_essentials,"../data/essentials_20001_22757.csv" )
+#write_csv(auction_results,"../data/results_20001_22757.csv" )
+
+```
+
+
+#Hold off on the listing details table for now - features are not critical to initial models
+```{r}
+listing_details <- file_list%>%
+        str_remove(".rds")%>%
+        str_remove("../data/bat_page_responses/group_a/rows_501_5000/")%>%data.frame()
+
+colnames(listing_details) <- "id"
+
+listing_details$vehicle_description <- NA
+listing_details$vehicle_description <- NA
+
+
+glimpse(listing_details)
+```
+
