@@ -21,15 +21,17 @@ library(jsonlite)
 
 # Obtain a list of file names from the .rds files
 ```{r}
-file_list <- list.files(path = "../data/bat_page_responses/group_a/", pattern = NULL, all.files = FALSE,
+file_list <- list.files(path = "../data/bat_page_responses/group_a/rows_1_500", pattern = NULL, all.files = FALSE,
            full.names = FALSE, recursive = TRUE,
            ignore.case = FALSE, include.dirs = FALSE, no.. = FALSE)
 ```
-```{r}
 
-file_list%>%
-  str_remove_all(".rds")%>%
-  str_replace_all("(rows_\\d+_\\d+/)","")
+```{r}
+#file_list[2]%>%
+#  str_remove_all(".rds")%>%
+#  str_remove_all("(rows_\\d+_\\d+/)")
+
+file_list
 ```
 
 ```{r}
@@ -39,12 +41,13 @@ sample_files <- (file_list#%>%
                  )%>%
   sample(10)
 ```
+
 ```{r}
 sample_files#[1]
 ```
 #LISTING ESSENTIALS
 ```{r}
-request <- read_rds("../data/bat_page_responses/group_a/"%>%
+request <- read_rds("../data/bat_page_responses/group_a/rows_1_500/"%>%
                       paste0(sample_files[1]))
 
 request%>%attributes()
@@ -54,13 +57,28 @@ content(request)%>%
   html_nodes(xpath ='//ul[@class="listing-essentials-items"]')%>%
   html_children()
 ```
+```{r}
+request<- read_rds("../data/bat_page_responses/group_a/rows_501_5000/rows_1_1933/10020101.rds")
+```
+
 Lot Number
+```{r}
+scrape_lot_number <- function(x) {
+  lot_number <- x%>%
+  html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=1]')%>%
+  html_text()%>%
+  str_extract("\\d+")
+  ;x 
+}
+```
+
+
 ```{r}
 lot_number <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=1]')%>%
   html_text()%>%
-  str_extract("\\d+")
-  #parse_number()
+  #str_extract("\\d+")
+  parse_number()
 typeof(lot_number)
 lot_number
 ```
@@ -70,6 +88,7 @@ seller_name <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]')%>%
   html_text()%>%
   str_remove("Seller: ")
+typeof(seller_name)
 seller_name
 ```
 
@@ -79,7 +98,7 @@ seller_profile <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=2]//a')%>%
   html_node(xpath='@href')%>%
   html_text()
-
+typeof(seller_profile)
 seller_profile
 ```
 
@@ -89,7 +108,7 @@ location<- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]')%>%
   html_text()%>%
   str_remove("Location: ")
-
+typeof(location)
 location
 ```
 
@@ -99,7 +118,7 @@ location_google_maps <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=3]//a')%>%
   html_node(xpath='@href')%>%
   html_text()
-
+typeof(location_google_maps)
 location_google_maps
 ```
 
@@ -110,7 +129,7 @@ chassis <- content(request)%>%
   html_text()%>%
   str_remove("Chassis: ")
   #parse_number()
-
+typeof(chassis)
 chassis
 ```
 
@@ -119,8 +138,10 @@ Odometer
 odometer <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
   html_text()%>%
-  str_remove("TMU")
-
+  tolower()%>%
+  str_remove("tmu")%>%
+  str_remove("shown")
+typeof(odometer)
 odometer
 ```
 TMU Indicated?
@@ -129,7 +150,7 @@ tmu <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=5]')%>%
   html_text()%>%
   str_detect("TMU")
-
+typeof(tmu)
 tmu
 ```
 
@@ -138,7 +159,7 @@ Engine
 engine <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=6]')%>%
   html_text()
-
+typeof(engine)
 engine
 ```
 Transmission
@@ -146,7 +167,7 @@ Transmission
 transmission <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]/li[position()=7]')%>%
   html_text()
-
+typeof(transmission)
 transmission
 ```
 Private Party or Dealer Listing?
@@ -156,7 +177,7 @@ seller_type <- content(request)%>%
   html_text()%>%
   tolower()%>%
   str_remove("private party or dealer: ")
-
+typeof(seller_type)
 seller_type
 ```
 
@@ -164,10 +185,16 @@ Additional Dealer Charges?
 ```{r}
 dealer_charges <- content(request)%>%
   html_nodes(xpath='//ul[@class="listing-essentials-items"]//li[contains(text(),"Additional Charges From This Dealer: USD")]')%>%
-                html_text()%>%
-  parse_number()
+                html_text()#%>%
+ # is.na()
+
+  #parse_number()%>%as.character()
   #str_remove("Additional Charges From This Dealer: USD ")
-dealer_charges
+
+typeof(dealer_charges)
+length(dealer_charges)
+dealer_charges#%>%typeof()
+dealer_charges%>%is.na()
 ```
 Model Page
 ```{r}
@@ -198,6 +225,25 @@ category_tag <- content(request)%>%
 
 category_tag
 ```
+```{r}
+#categ <- content(request)%>%
+#    html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+#    html_nodes(xpath='li[@class="listing-essentials-item #listing-essentials-item-categories"]//a[@rel="category tag"]')%>%
+#    html_text()
+#categ  
+#  if(length(category_tag)==0)
+#  {
+#    category_tag<-NA
+#  }
+#  else category_tag
+#  ;category_tag
+
+prem <- content(request)%>%html_nodes(xpath='//ul[@class="listing-essentials-items"]')%>%
+    html_nodes(xpath='li[@class="listing-essentials-item listing-essentials-item-categories"]//a[not(@rel)][last()]')%>%
+    html_text()#%>%
+#    str_detect("Premium")
+prem
+```
 
 Premium Listing?
 ```{r}
@@ -222,9 +268,7 @@ vehicle_description_text <- content(request)%>%
 #merge into one text chunk
 paste(unlist(vehicle_description_text), collapse =" ")
 ```
-```{r}
-paste(unlist(vehicle_description_text), collapse =" ")
-```
+
 
 Number of videos
 ```{r}
@@ -247,7 +291,9 @@ listing_nicknames <-
   content(request)%>%
   html_nodes(xpath='//div[@class="column column-left"]//div//div[@class="listing-nicknames"]')%>%#[@data-gallery-items]
 #  html_children()
-  html_text()
+  html_text()#%>%
+#  str_remove("Filed under: ")
+listing_nicknames
 ```
 
 Number of photos
@@ -289,7 +335,7 @@ http_type(request4)
 
 Auction Outcome
 ```{r}
-auction_outcome <- content(request4)%>%
+auction_outcome <- content(request)%>%
   html_nodes(xpath='//div[@class="listing-available-info"]//span[@class="data-label" and position()=1]')%>%
   html_text()%>%
   tolower()%>%
@@ -303,7 +349,7 @@ auction_outcome
 ```
 Whether Auction is Live or Not
 ```{r}
-auction_live <- content(request4)%>%
+auction_live <- content(request)%>%
   html_nodes(xpath='//div[@class="listing-available-info"]//span[@class="data-label" and position()=1]')%>%
   html_text()%>%
   tolower()%>%
@@ -342,6 +388,7 @@ final_bid_amount <- content(request)%>%
 final_bid_amount
 
 ```
+
 
 Winning Bidder Username
 ```{r}
@@ -397,7 +444,7 @@ auction_ended
 Total Bids in Auction
 
 ```{r}
-total_bids <- content(request)%>%
+auction_bids <- content(request1)%>%
   #bid container and table with auction stats
   html_nodes(xpath='//div[@id="listing-bid-container"]/table[@class="listing-stats ended"]')%>%
   #tables rows that contain the specified class
@@ -407,11 +454,16 @@ total_bids <- content(request)%>%
   html_text()%>%
   as.numeric()
 
-total_bids
+#if(length(auction_bids)==0)
+#{
+#  auction_bids<- auction_bids%>%is_null()
+#  }
+
+auction_bids
 ```
 Total Views of Auction
 ```{r}
-total_views <- content(request)%>%
+auction_views <- content(request)%>%
   #bid container and table with auction stats
   html_nodes(xpath='//div[@id="listing-bid-container"]/table[@id="listing-actions-stats"]')%>%
   #tables rows that contain the specified attribute
@@ -420,13 +472,27 @@ total_views <- content(request)%>%
   #parse for only digits
   parse_number()
 
-total_views
+auction_views
+```
+
+Total Comments
+```{r}
+auction_comments <- 
+  content(request1)%>%
+  #bid container and table with auction stats
+  html_nodes(xpath='//div//h2[@class="comments-title"]')%>%
+  #tables rows that contain the specified attribute
+  html_text()%>%
+  #parse for only digits
+  parse_number()
+
+auction_comments
 ```
 
 Number of Users Watching Auction
 
 ```{r}
-watchers <- content(request)%>%
+auction_watchers <- content(request)%>%
   #bid container and table with auction stats
   html_nodes(xpath='//div[@id="listing-bid-container"]/table[@id="listing-actions-stats"]')%>%
   #tables rows that contain the specified attribute
@@ -435,7 +501,7 @@ watchers <- content(request)%>%
   #parse for only digits
   parse_number()
 
-watchers
+auction_watchers
 ```
 #AUCTION COMMENT & BID HISTORY
 
