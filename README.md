@@ -1,5 +1,6 @@
-Predicting Winning Bids at Classic & Enthusiast Car Auctions
+## Predicting Winning Bids at Classic & Enthusiast Car Auctions
 
+### [View project results here ](https://sites.google.com/view/everest-auctions/home)
 
 Background
 
